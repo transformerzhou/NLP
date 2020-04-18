@@ -1,0 +1,6 @@
+typeguard
+gensim
+tqdm
+regex
+scikit-learn
+sentencepiece

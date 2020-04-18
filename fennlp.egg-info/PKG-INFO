@@ -1,0 +1,12 @@
+Metadata-Version: 1.2
+Name: fennlp
+Version: 0.0.6
+Summary: An out-of-the-box NLP toolkit can easily help you solve tasks such as              Entity Recognition, Text Classification, Relation Extraction and so on.
+Home-page: https://github.com/kyzhouhzau/fennlp
+Author: Kaiyin Zhou
+Author-email: zhoukaiyinhzau@gmail.com
+License: Apache
+Description: UNKNOWN
+Platform: UNKNOWN
+Classifier: Programming Language :: Python
+Requires-Python: >=3.6.0
