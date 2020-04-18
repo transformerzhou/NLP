@@ -152,7 +152,7 @@ def main(_):
         optimizer_crf.apply_gradients(grads_and_vars=zip(grads_crf, model.crf.variables))
         Batch += 1
     
-    model.save("model")
+    model.save("./model")
 
 if __name__ == '__main__':
     flags.mark_flag_as_required("data_dir")
