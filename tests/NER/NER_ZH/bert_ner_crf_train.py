@@ -94,10 +94,10 @@ bert_init_weights_from_checkpoint(model,
                                   pooler=False)
 
 # 写入数据 通过check_exist=True参数控制仅在第一次调用时写入
-writer = TFWriter(param.maxlen, vocab_file, data_dir="tests\NER\NER_ZH\ner_data",
+writer = TFWriter(param.maxlen, vocab_file, data_dir=r"tests\NER\NER_ZH\ner_data",
                   modes=["train"], check_exist=False)
 
-ner_load = TFLoader(param.maxlen, param.batch_size, data_dir="tests\NER\NER_ZH\ner_data", epoch=5)
+ner_load = TFLoader(param.maxlen, param.batch_size, data_dir=r"tests\NER\NER_ZH\ner_data", epoch=5)
 
 # 训练模型
 # 使用tensorboard
