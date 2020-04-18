@@ -11,10 +11,18 @@ load_check = LoadCheckpoint(language='zh')
 param, vocab_file, model_path = load_check.load_bert_param()
 
 # 定制参数
-param.batch_size = 16
-param.maxlen = 100
-param.label_size = 46
+param.batch_size = 32
+param.maxlen = 64
+param.label_size = 7
 
+from absl import flags
+from absl import app
+
+
+flags.DEFINE_string('data_dir', None,
+                    'Path to training data for BERT classifier.')
+#
+FLAGS = flags.FLAGS
 
 # 构建模型
 class BERT_NER(tf.keras.Model):
@@ -50,46 +58,50 @@ class BERT_NER(tf.keras.Model):
         loss, predict = self(inputs, is_training)
         return predict
 
+def main(_):
+    model = BERT_NER(param)
 
-model = BERT_NER(param)
+    model.build(input_shape=(4, param.batch_size, param.maxlen))
 
-model.build(input_shape=(4, param.batch_size, param.maxlen))
+    model.summary()
 
-model.summary()
+    # 写入数据 通过check_exist=True参数控制仅在第一次调用时写入
+    # writer = TFWriter(param.maxlen, vocab_file,
+                        # modes=["valid"], check_exist=True)
 
-# 写入数据 通过check_exist=True参数控制仅在第一次调用时写入
-writer = TFWriter(param.maxlen, vocab_file,
-                    modes=["valid"], check_exist=True)
+    ner_load = TFLoader(param.maxlen, param.batch_size, data_dir=FLAGS.data_dir)
 
-ner_load = TFLoader(param.maxlen, param.batch_size)
+    # Metrics
+    f1score = Metric.SparseF1Score("macro",predict_sparse=True)
+    precsionscore = Metric.SparsePrecisionScore("macro",predict_sparse=True)
+    recallscore = Metric.SparseRecallScore("macro",predict_sparse=True)
+    accuarcyscore = Metric.SparseAccuracy(predict_sparse=True)
 
-# Metrics
-f1score = Metric.SparseF1Score("macro",predict_sparse=True)
-precsionscore = Metric.SparsePrecisionScore("macro",predict_sparse=True)
-recallscore = Metric.SparseRecallScore("macro",predict_sparse=True)
-accuarcyscore = Metric.SparseAccuracy(predict_sparse=True)
+    # 保存模型
+    checkpoint = tf.train.Checkpoint(model=model)
+    checkpoint.restore(tf.train.latest_checkpoint('./save'))
+    # For test model
+    # print(dir(checkpoint))
+    Batch = 0
+    f1s = []
+    precisions = []
+    recalls = []
+    accuracys = []
+    for X, token_type_id, input_mask, Y in ner_load.load_test():
+        predict = model.predict([X, token_type_id, input_mask, Y])  # [batch_size, max_length,label_size]
 
-# 保存模型
-checkpoint = tf.train.Checkpoint(model=model)
-checkpoint.restore(tf.train.latest_checkpoint('./save'))
-# For test model
-# print(dir(checkpoint))
-Batch = 0
-f1s = []
-precisions = []
-recalls = []
-accuracys = []
-for X, token_type_id, input_mask, Y in ner_load.load_valid():
-    predict = model.predict([X, token_type_id, input_mask, Y])  # [batch_size, max_length,label_size]
+        f1s.append(f1score(Y, predict))
+        precisions.append(precsionscore(Y, predict))
+        recalls.append(recallscore(Y, predict))
+        accuracys.append(accuarcyscore(Y, predict))
+        # print("Sentence", writer.convert_id_to_vocab(tf.reshape(X, [-1]).numpy()))
+        #
+        # print("Label", writer.convert_id_to_label(tf.reshape(predict, [-1]).numpy()))
+    print("f1:{}\tprecision:{}\trecall:{}\taccuracy:{}\n".format(np.mean(f1s),
+                                                                 np.mean(precisions),
+                                                                 np.mean(recalls),
+                                                                 np.mean(accuracys)))
 
-    f1s.append(f1score(Y, predict))
-    precisions.append(precsionscore(Y, predict))
-    recalls.append(recallscore(Y, predict))
-    accuracys.append(accuarcyscore(Y, predict))
-    # print("Sentence", writer.convert_id_to_vocab(tf.reshape(X, [-1]).numpy()))
-    #
-    # print("Label", writer.convert_id_to_label(tf.reshape(predict, [-1]).numpy()))
-print("f1:{}\tprecision:{}\trecall:{}\taccuracy:{}\n".format(np.mean(f1s),
-                                                             np.mean(precisions),
-                                                             np.mean(recalls),
-                                                             np.mean(accuracys)))
+if __name__ == '__main__':
+    flags.mark_flag_as_required("data_dir")
+    app.run(main)
