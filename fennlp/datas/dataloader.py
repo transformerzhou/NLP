@@ -30,7 +30,7 @@ class TFWriter(object):
         for mode in modes:
             self.mode = mode
             print("Writing {}".format(self.mode))
-            print(self.data_dir, self.model)
+            print(self.data_dir, self.mode)
             self.filename = os.path.join(self.data_dir, self.mode)
         
             if task == "NER":
