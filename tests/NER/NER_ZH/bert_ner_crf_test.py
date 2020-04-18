@@ -66,7 +66,7 @@ def main(_):
     model.summary()
 
     # 写入数据 通过check_exist=True参数控制仅在第一次调用时写入
-    writer = TFWriter(param.maxlen, vocab_file, data_dir=FLAGS.data_dir
+    writer = TFWriter(param.maxlen, vocab_file, data_dir=FLAGS.data_dir,
                         modes=["test"], check_exist=True)
 
     ner_load = TFLoader(param.maxlen, param.batch_size, data_dir=FLAGS.data_dir)
