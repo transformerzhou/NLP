@@ -8,15 +8,17 @@ from fennlp.models import bert
 from fennlp.optimizers import optim
 from fennlp.tools import bert_init_weights_from_checkpoint
 from absl import flags
+from absl import app
+
 
 # flags.DEFINE_enum(
 #     'mode', 'train', ['train', 'test', 'dev'],
 #     )
 #
-# flags.DEFINE_string('data_dir', None,
-#                     'Path to training data for BERT classifier.')
+flags.DEFINE_string('data_dir', None,
+                    'Path to training data for BERT classifier.')
 #
-# FLAG = flags.FLAGS
+FLAGS = flags.FLAGS
 
 # 载入参数
 # LoadCheckpoint(language='zh', model="bert", parameters="base", cased=True, url=None)
@@ -71,81 +73,87 @@ class BERT_NER(tf.keras.Model):
         return predict
 
 
-model = BERT_NER(param)
+def main(_):
+    model = BERT_NER(param)
 
-model.build(input_shape=(4, param.batch_size, param.maxlen))
+    model.build(input_shape=(4, param.batch_size, param.maxlen))
 
-model.summary()
+    model.summary()
 
 # 构建优化器
 
-optimizer_bert = optim.AdamWarmup(learning_rate=2e-5,  # 重要参数
-                                  decay_steps=10000,  # 重要参数
-                                  warmup_steps=1000, )
-optimizer_crf = optim.AdamWarmup(learning_rate=1e-3,
-                                 decay_steps=10000,  # 重要参数
-                                 warmup_steps=1000,
-                                 )
-#
-# 初始化参数
-bert_init_weights_from_checkpoint(model,
-                                  model_path,
-                                  param.num_hidden_layers,
-                                  pooler=False)
+    optimizer_bert = optim.AdamWarmup(learning_rate=2e-5,  # 重要参数
+                                      decay_steps=10000,  # 重要参数
+                                      warmup_steps=1000, )
+    optimizer_crf = optim.AdamWarmup(learning_rate=1e-3,
+                                     decay_steps=10000,  # 重要参数
+                                     warmup_steps=1000,
+                                     )
+    #
+    # 初始化参数
+    bert_init_weights_from_checkpoint(model,
+                                      model_path,
+                                      param.num_hidden_layers,
+                                      pooler=False)
 
-# 写入数据 通过check_exist=True参数控制仅在第一次调用时写入
-writer = TFWriter(param.maxlen, vocab_file, modes=["train"], data_dir="/content/NLP/tests/NER/NER_ZH/ner_data",check_exist=False)
+    # 写入数据 通过check_exist=True参数控制仅在第一次调用时写入
+    writer = TFWriter(param.maxlen, vocab_file, data_dir=FLAGS.data_dir,
+                      modes=["train"], check_exist=False)
 
-ner_load = TFLoader(param.maxlen, param.batch_size, data_dir="/content/NLP/tests/NER/NER_ZH/ner_data", epoch=5)
+    ner_load = TFLoader(param.maxlen, param.batch_size, data_dir=FLAGS.data_dir, epoch=5)
 
-# 训练模型
-# 使用tensorboard
-summary_writer = tf.summary.create_file_writer("./tensorboard")
+    # 训练模型
+    # 使用tensorboard
+    summary_writer = tf.summary.create_file_writer("./tensorboard")
 
-# Metrics
-f1score = Metric.SparseF1Score(average="macro", predict_sparse=True)
-precsionscore = Metric.SparsePrecisionScore(average="macro", predict_sparse=True)
-recallscore = Metric.SparseRecallScore(average="macro", predict_sparse=True)
-accuarcyscore = Metric.SparseAccuracy(predict_sparse=True)
+    # Metrics
+    f1score = Metric.SparseF1Score(average="macro", predict_sparse=True)
+    precsionscore = Metric.SparsePrecisionScore(average="macro", predict_sparse=True)
+    recallscore = Metric.SparseRecallScore(average="macro", predict_sparse=True)
+    accuarcyscore = Metric.SparseAccuracy(predict_sparse=True)
 
-# 保存模型
-checkpoint = tf.train.Checkpoint(model=model)
-manager = tf.train.CheckpointManager(checkpoint, directory="./save",
-                                     checkpoint_name="model.ckpt",
-                                     max_to_keep=3)
-# For train model
-Batch = 0
-for X, token_type_id, input_mask, Y in ner_load.load_train():
-    with tf.GradientTape(persistent=True) as tape:
-        loss, predict = model([X, token_type_id, input_mask, Y])
+    # 保存模型
+    checkpoint = tf.train.Checkpoint(model=model)
+    manager = tf.train.CheckpointManager(checkpoint, directory="./save",
+                                         checkpoint_name="model.ckpt",
+                                         max_to_keep=3)
+    # For train model
+    Batch = 0
+    for X, token_type_id, input_mask, Y in ner_load.load_train():
+        with tf.GradientTape(persistent=True) as tape:
+            loss, predict = model([X, token_type_id, input_mask, Y])
 
-        f1 = f1score(Y, predict)
-        precision = precsionscore(Y, predict)
-        recall = recallscore(Y, predict)
-        accuracy = accuarcyscore(Y, predict)
-        if Batch % 101 == 0:
-            print("Batch:{}\tloss:{:.4f}".format(Batch, loss.numpy()))
-            print("Batch:{}\tacc:{:.4f}".format(Batch, accuracy))
-            print("Batch:{}\tprecision{:.4f}".format(Batch, precision))
-            print("Batch:{}\trecall:{:.4f}".format(Batch, recall))
-            print("Batch:{}\tf1score:{:.4f}".format(Batch, f1))
+            f1 = f1score(Y, predict)
+            precision = precsionscore(Y, predict)
+            recall = recallscore(Y, predict)
+            accuracy = accuarcyscore(Y, predict)
+            if Batch % 101 == 0:
+                print("Batch:{}\tloss:{:.4f}".format(Batch, loss.numpy()))
+                print("Batch:{}\tacc:{:.4f}".format(Batch, accuracy))
+                print("Batch:{}\tprecision{:.4f}".format(Batch, precision))
+                print("Batch:{}\trecall:{:.4f}".format(Batch, recall))
+                print("Batch:{}\tf1score:{:.4f}".format(Batch, f1))
 
-            print("Sentence", writer.convert_id_to_vocab(tf.reshape(X, [-1]).numpy()))
-            print("predict", writer.convert_id_to_label(tf.reshape(predict, [-1]).numpy()))
-            print("label", writer.convert_id_to_label(tf.reshape(Y, [-1]).numpy()))
-            manager.save(checkpoint_number=Batch)
+                print("Sentence", writer.convert_id_to_vocab(tf.reshape(X, [-1]).numpy()))
+                print("predict", writer.convert_id_to_label(tf.reshape(predict, [-1]).numpy()))
+                print("label", writer.convert_id_to_label(tf.reshape(Y, [-1]).numpy()))
+                manager.save(checkpoint_number=Batch)
 
-        with summary_writer.as_default():
-            tf.summary.scalar("loss", loss, step=Batch)
-            tf.summary.scalar("acc", accuracy, step=Batch)
-            tf.summary.scalar("f1", f1, step=Batch)
-            tf.summary.scalar("precision", precision, step=Batch)
-            tf.summary.scalar("recall", recall, step=Batch)
+            with summary_writer.as_default():
+                tf.summary.scalar("loss", loss, step=Batch)
+                tf.summary.scalar("acc", accuracy, step=Batch)
+                tf.summary.scalar("f1", f1, step=Batch)
+                tf.summary.scalar("precision", precision, step=Batch)
+                tf.summary.scalar("recall", recall, step=Batch)
 
-    grads_bert = tape.gradient(loss, model.bert.variables + model.dense.variables)
-    grads_crf = tape.gradient(loss, model.crf.variables)
-    optimizer_bert.apply_gradients(grads_and_vars=zip(grads_bert, model.bert.variables + model.dense.variables))
-    optimizer_crf.apply_gradients(grads_and_vars=zip(grads_crf, model.crf.variables))
-    Batch += 1
+        grads_bert = tape.gradient(loss, model.bert.variables + model.dense.variables)
+        grads_crf = tape.gradient(loss, model.crf.variables)
+        optimizer_bert.apply_gradients(grads_and_vars=zip(grads_bert, model.bert.variables + model.dense.variables))
+        optimizer_crf.apply_gradients(grads_and_vars=zip(grads_crf, model.crf.variables))
+        Batch += 1
+    
+    model.save("model")
 
-model.save("model")
+if __name__ == '__main__':
+    flags.mark_flag_as_required("data_dir")
+    app.run(main)
